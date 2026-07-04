@@ -1,0 +1,1515 @@
+{
+  "name": "TFM",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 12
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -48,
+        -992
+      ],
+      "id": "537ac63b-361c-4e8c-9ac8-d97f08e0801d",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast?latitude=40.4168&longitude=-3.7038&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,weathercode,relative_humidity_2m_max,uv_index_max&timezone=Europe/Madrid&past_days=1&forecast_days=0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        256,
+        -992
+      ],
+      "id": "56bbf29a-ddb3-401e-8bb4-276047b71bd0",
+      "name": "Fetch Weather"
+    },
+    {
+      "parameters": {
+        "url": "https://marine-api.open-meteo.com/v1/marine?latitude=36.7&longitude=-4.4&daily=sea_surface_temperature_max,wave_height_max&timezone=Europe/Madrid&past_days=1&forecast_days=0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        736,
+        -736
+      ],
+      "id": "04be0f33-20b2-4070-935b-72424d326b04",
+      "name": "Fetch Marine"
+    },
+    {
+      "parameters": {
+        "url": "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=40.4168&longitude=-3.7038&hourly=pm10,pm2_5,nitrogen_dioxide,ozone&timezone=Europe/Madrid&past_days=1&forecast_days=0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        -432
+      ],
+      "id": "3052fe4b-a927-499b-8249-ce2004d2a496",
+      "name": "Fetch Air Quality"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Fetch Weather').first().json.daily;\nconst content = 'Clean this weather data for Madrid. Return ONLY a JSON array, one object per day with fields: fetch_date (YYYY-MM-DD), temp_max, temp_min, precipitation, windspeed_max, humidity_max, uv_index_max, weather_code, heat_risk (LOW if temp_max<30, MEDIUM if <35, HIGH if <38, EXTREME if >=38). Fix nulls. Return ONLY JSON array, no markdown. Data: ' + JSON.stringify(data);\nreturn [{json:{model:\"llama-3.3-70b-versatile\",temperature:0.1,messages:[{role:\"user\",content:content}]}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        -992
+      ],
+      "id": "76973400-48a6-46ca-a4e8-d563e954b708",
+      "name": "Prepare Weather"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Fetch Marine').first().json.daily;\nconst content = 'Clean this marine data. Return ONLY a JSON array, one object per day with fields: fetch_date (YYYY-MM-DD), sea_temp_max (Celsius), wave_height_max (metres). Fix nulls. Return ONLY JSON array, no markdown. Data: ' + JSON.stringify(data);\nreturn [{json:{model:\"llama-3.3-70b-versatile\",temperature:0.1,messages:[{role:\"user\",content:content}]}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        -736
+      ],
+      "id": "9a2e80d3-e8b3-4a14-9b81-cb942b4b9c54",
+      "name": "Prepare Marine"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Fetch Air Quality').first().json.hourly;\nconst content = 'Clean this hourly air quality data for Madrid. Aggregate to daily averages. Return ONLY a JSON array, one object per day with fields: fetch_date (YYYY-MM-DD), pm25_avg, pm10_avg, no2_avg, o3_avg, pm25_exceeds_who (boolean, threshold 15), no2_exceeds_who (boolean, threshold 25), o3_exceeds_who (boolean, threshold 100), aqi_status (GOOD or WARNING). Return ONLY JSON array, no markdown. Data: ' + JSON.stringify(data);\nreturn [{json:{model:\"llama-3.3-70b-versatile\",temperature:0.1,messages:[{role:\"user\",content:content}]}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        -432
+      ],
+      "id": "ab8f67b6-00ff-40ac-bb6a-afe93697899d",
+      "name": "Prepare Air"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{GROQ_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($input.first().json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        928,
+        -992
+      ],
+      "id": "71932a87-8c49-4f29-a539-0a97cfc31e18",
+      "name": "Clean Weather"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{GROQ_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($input.first().json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1376,
+        -736
+      ],
+      "id": "8dc64cd9-2d81-46b7-b4bc-733a0a4cb977",
+      "name": "Clean Marine"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{GROQ_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($input.first().json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1744,
+        -432
+      ],
+      "id": "c4f61fa2-1378-416d-bd50-5734eb12f09d",
+      "name": "Clean Air"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "datasetId": {
+          "__rl": true,
+          "value": "raw_data",
+          "mode": "list",
+          "cachedResultName": "raw_data"
+        },
+        "tableId": {
+          "__rl": true,
+          "value": "weather_daily",
+          "mode": "list",
+          "cachedResultName": "weather_daily"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        1616,
+        -992
+      ],
+      "id": "cabf9a3c-27c0-4963-93ee-8c25f49dc346",
+      "name": "Save Weather Raw",
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst content = raw.choices?.[0]?.message?.content || '[]';\nlet records = [];\ntry { records = JSON.parse(content.replace(/```json|```/g,'').trim()); }\ncatch(e) { return [{json:{error:'parse failed'}}]; }\nif (!Array.isArray(records)) records = [records];\nreturn records.map(r => ({json:{\n  fetch_date: r.fetch_date||r.time,\n  temp_max: parseFloat(r.temp_max)||null,\n  temp_min: parseFloat(r.temp_min)||null,\n  precipitation: parseFloat(r.precipitation)||0,\n  windspeed_max: parseFloat(r.windspeed_max)||null,\n  humidity_max: parseFloat(r.humidity_max)||null,\n  uv_index_max: parseFloat(r.uv_index_max)||null,\n  weather_code: parseInt(r.weather_code)||0,\n  heat_risk: r.heat_risk||'LOW',\n  ingestion_ts: new Date().toISOString()\n}}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        -992
+      ],
+      "id": "2b0177f2-d4e3-4787-bdef-0f6961dbed04",
+      "name": "Parse Weather Clean"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "datasetId": {
+          "__rl": true,
+          "value": "raw_data",
+          "mode": "list",
+          "cachedResultName": "raw_data"
+        },
+        "tableId": {
+          "__rl": true,
+          "value": "marine_daily",
+          "mode": "list",
+          "cachedResultName": "marine_daily"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        2016,
+        -736
+      ],
+      "id": "9ef7c370-5ffd-44e2-9129-dee0de9a10e8",
+      "name": "Save Marine Raw",
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst content = raw.choices?.[0]?.message?.content || '[]';\nlet records = [];\ntry { records = JSON.parse(content.replace(/```json|```/g,'').trim()); }\ncatch(e) { return [{json:{error:'parse failed'}}]; }\nif (!Array.isArray(records)) records = [records];\nreturn records.map(r => ({json:{\n  fetch_date: r.fetch_date||r.time,\n  sea_temp_max: parseFloat(r.sea_temp_max)||null,\n  wave_height_max: parseFloat(r.wave_height_max)||null,\n  ingestion_ts: new Date().toISOString()\n}}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        -736
+      ],
+      "id": "ae0404c2-0f59-4d7b-996e-5afaa9214987",
+      "name": "Parse Marine Clean"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "datasetId": {
+          "__rl": true,
+          "value": "raw_data",
+          "mode": "list",
+          "cachedResultName": "raw_data"
+        },
+        "tableId": {
+          "__rl": true,
+          "value": "air_quality_daily",
+          "mode": "list",
+          "cachedResultName": "air_quality_daily"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        2304,
+        -432
+      ],
+      "id": "e35bd6ef-125a-4517-aa0e-118bbfddbcec",
+      "name": "Save AQI Raw",
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst content = raw.choices?.[0]?.message?.content || '[]';\nlet records = [];\ntry {\n  records = JSON.parse(content.replace(/```json|```/g,'').trim());\n} catch(e) {\n  const hourly = $('Fetch Air Quality').first().json.hourly;\n  const times = hourly.time||[];\n  const byDate = {};\n  times.forEach((ts,i)=>{\n    const date=ts.split('T')[0];\n    if(!byDate[date]) byDate[date]={pm25:[],pm10:[],no2:[],o3:[]};\n    if(hourly.pm2_5?.[i]!=null) byDate[date].pm25.push(hourly.pm2_5[i]);\n    if(hourly.pm10?.[i]!=null) byDate[date].pm10.push(hourly.pm10[i]);\n    if(hourly.nitrogen_dioxide?.[i]!=null) byDate[date].no2.push(hourly.nitrogen_dioxide[i]);\n    if(hourly.ozone?.[i]!=null) byDate[date].o3.push(hourly.ozone[i]);\n  });\n  const avg=arr=>arr.length?Math.round(arr.reduce((a,b)=>a+b,0)/arr.length*100)/100:null;\n  return Object.entries(byDate).map(([date,v])=>{\n    const p=avg(v.pm25),n=avg(v.no2),o=avg(v.o3);\n    return {json:{fetch_date:date,pm25_avg:p,pm10_avg:avg(v.pm10),no2_avg:n,o3_avg:o,\n      pm25_exceeds_who:p>15,no2_exceeds_who:n>25,o3_exceeds_who:o>100,\n      aqi_status:(p>15||n>25||o>100)?'WARNING':'GOOD',\n      ingestion_ts:new Date().toISOString()}};\n  });\n}\nif(!Array.isArray(records)) records=[records];\nreturn records.map(r=>({json:{\n  fetch_date:r.fetch_date,\n  pm25_avg:parseFloat(r.pm25_avg)||null,\n  pm10_avg:parseFloat(r.pm10_avg)||null,\n  no2_avg:parseFloat(r.no2_avg)||null,\n  o3_avg:parseFloat(r.o3_avg)||null,\n  pm25_exceeds_who:r.pm25_exceeds_who===true||r.pm25_exceeds_who==='true',\n  no2_exceeds_who:r.no2_exceeds_who===true||r.no2_exceeds_who==='true',\n  o3_exceeds_who:r.o3_exceeds_who===true||r.o3_exceeds_who==='true',\n  aqi_status:r.aqi_status||'GOOD',\n  ingestion_ts:new Date().toISOString()\n}}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        -432
+      ],
+      "id": "30547c37-09cc-4a59-994e-5be6298a6e3d",
+      "name": "Parse AQI Clean"
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "sqlQuery": "SELECT fetch_date FROM `tfm-dataflow.raw_data.marine_daily`",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        976,
+        -736
+      ],
+      "id": "190c2422-92e4-41d0-b7f5-81c76f19e472",
+      "name": "Check Marine Exists",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "sqlQuery": "SELECT fetch_date FROM `tfm-dataflow.raw_data.air_quality_daily`",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        1376,
+        -432
+      ],
+      "id": "a5483d90-5333-4420-a2b2-ab8eacd88c4a",
+      "name": "Check AQI Exists",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const todayDate = new Date().toISOString().split('T')[0];\nconst weatherRows = $('Parse Weather Clean').all().map(i=>i.json);\nconst marineRows = $('Parse Marine Clean').all().map(i=>i.json);\nconst aqiRows = $('Parse AQI Clean').all().map(i=>i.json);\n\n// Get dates that already have a health score computed\nlet existingDates = [];\ntry {\n  existingDates = $('Check Existing Health Scores').all().map(i=>i.json.score_date);\n} catch(e) {\n  existingDates = [];\n}\n\n// Only process weather rows for dates NOT already in health_score table\nconst newWeatherRows = weatherRows.filter(r => !existingDates.includes(r.fetch_date));\n\nif (newWeatherRows.length === 0) {\n  return [{json:{skip: true, message: 'No new dates to process — all dates already have health scores'}}];\n}\n\nreturn newWeatherRows.map((today, idx) => {\n  const allIdx = weatherRows.findIndex(r=>r.fetch_date===today.fetch_date);\n  const yesterday = weatherRows[allIdx-1]||{};\n  const date = today.fetch_date || todayDate;\n  const mar = marineRows.find(r=>r.fetch_date===date)||{};\n  const todayAQI = aqiRows.find(r=>r.fetch_date===date)||{};\n\n  const breaches=[todayAQI.pm25_exceeds_who,todayAQI.no2_exceeds_who,todayAQI.o3_exceeds_who].filter(Boolean).length;\n  const t=parseFloat(today.temp_max)||25;\n  const uv=parseFloat(today.uv_index_max)||3;\n  const h=parseFloat(today.humidity_max)||40;\n  const tS=t<30?25:t<33?20:t<37?10:0;\n  const aS=breaches===0?25:breaches===1?15:5;\n  const uS=uv<3?25:uv<6?20:uv<8?10:uv<11?5:0;\n  const hS=h<40?25:h<60?20:h<80?10:5;\n  const total=tS+aS+uS+hS;\n  const tempChange=today.temp_max&&yesterday.temp_max\n    ?Math.round((today.temp_max-yesterday.temp_max)*10)/10:null;\n\n  return {json:{\n    score_date:date,\n    total_score:total,\n    label:total>=75?'Safe':total>=50?'Caution':total>=25?'High Risk':'Extreme Risk',\n    temp_score:tS,aqi_score:aS,uv_score:uS,humidity_score:hS,\n    temp_max:t,uv_index:uv,humidity:h,aqi_breaches:breaches,\n    pm25_avg:todayAQI.pm25_avg||null,\n    no2_avg:todayAQI.no2_avg||null,\n    sea_temp:parseFloat(mar.sea_temp_max)||null,\n    temp_change_vs_yesterday:tempChange,\n    trend_vs_yesterday:tempChange>2?'getting hotter':tempChange<-2?'cooling down':'stable',\n    created_at:new Date().toISOString()\n  }};\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        -208
+      ],
+      "id": "a185c8e3-f75d-4d71-8b11-d76d3303e4b0",
+      "name": "Compute Health Score",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const existingDates = $('Check Weather Exists').all().map(i => i.json.fetch_date);\nconst newRecords = $input.all().map(i => i.json);\nconst filtered = newRecords.filter(r => !existingDates.includes(r.fetch_date));\nif (filtered.length === 0) {\n  return [{json: {skipped: true, message: 'All dates already exist'}}];\n}\nreturn filtered.map(r => ({json: r}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        -992
+      ],
+      "id": "aa3a84a3-aa38-4e1a-9c7b-10f84286b844",
+      "name": "Filter New Weather Dates"
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "sqlQuery": "SELECT fetch_date FROM `tfm-dataflow.raw_data.weather_daily`",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        512,
+        -992
+      ],
+      "id": "5c993f45-deca-4dd5-aa76-6b7bf9cc2ff7",
+      "name": "Check Weather Exists",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const existingDates = $('Check Marine Exists').all().map(i => i.json.fetch_date);\nconst newRecords = $input.all().map(i => i.json);\nconst filtered = newRecords.filter(r => !existingDates.includes(r.fetch_date));\nif (filtered.length === 0) {\n  return [{json: {skipped: true, message: 'All dates already exist'}}];\n}\nreturn filtered.map(r => ({json: r}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        -736
+      ],
+      "id": "dadd7e3e-3bb1-4724-85b4-daf303217cfd",
+      "name": "Filter New Marine Dates"
+    },
+    {
+      "parameters": {
+        "jsCode": "const existingDates = $('Check AQI Exists').all().map(i => i.json.fetch_date);\nconst newRecords = $input.all().map(i => i.json);\nconst filtered = newRecords.filter(r => !existingDates.includes(r.fetch_date));\nif (filtered.length === 0) {\n  return [{json: {skipped: true, message: 'All dates already exist'}}];\n}\nreturn filtered.map(r => ({json: r}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        -432
+      ],
+      "id": "866eff67-9dd5-4217-a83a-3be01ea86062",
+      "name": "Filter New AQI Dates"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "projectId": {
+          "__rl": true,
+          "value": "=tfm-dataflow",
+          "mode": "id"
+        },
+        "datasetId": {
+          "__rl": true,
+          "value": "=analytics",
+          "mode": "id"
+        },
+        "tableId": {
+          "__rl": true,
+          "value": "health_score",
+          "mode": "list",
+          "cachedResultName": "health_score"
+        },
+        "dataMode": "define",
+        "fieldsUi": {
+          "values": [
+            {
+              "fieldId": "score_date",
+              "fieldValue": "={{ $json.score_date }}"
+            },
+            {
+              "fieldId": "total_score",
+              "fieldValue": "={{ $json.total_score }}"
+            },
+            {
+              "fieldId": "label",
+              "fieldValue": "={{ $json.label }}"
+            },
+            {
+              "fieldId": "temp_score",
+              "fieldValue": "={{ $json.temp_score }}"
+            },
+            {
+              "fieldId": "aqi_score",
+              "fieldValue": "={{ $json.aqi_score }}"
+            },
+            {
+              "fieldId": "uv_score",
+              "fieldValue": "={{ $json.uv_score }}"
+            },
+            {
+              "fieldId": "humidity_score",
+              "fieldValue": "={{ $json.humidity_score }}"
+            },
+            {
+              "fieldId": "temp_max",
+              "fieldValue": "={{ $json.temp_max }}"
+            },
+            {
+              "fieldId": "uv_index",
+              "fieldValue": "={{ $json.uv_index }}"
+            },
+            {
+              "fieldId": "humidity",
+              "fieldValue": "={{ $json.humidity }}"
+            },
+            {
+              "fieldId": "aqi_breaches",
+              "fieldValue": "={{ $json.aqi_breaches }}"
+            },
+            {
+              "fieldId": "pm25_avg",
+              "fieldValue": "={{ $json.pm25_avg }}"
+            },
+            {
+              "fieldId": "no2_avg",
+              "fieldValue": "={{ $json.no2_avg }}"
+            },
+            {
+              "fieldId": "sea_temp",
+              "fieldValue": "={{ $json.sea_temp }}"
+            },
+            {
+              "fieldId": "temp_change_vs_yesterday",
+              "fieldValue": "={{ $json.temp_change_vs_yesterday }}"
+            },
+            {
+              "fieldId": "trend_vs_yesterday",
+              "fieldValue": "={{ $json.temp_vs_yesterday }}"
+            },
+            {
+              "fieldId": "created_at",
+              "fieldValue": "={{ $json.created_at }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        1824,
+        -208
+      ],
+      "id": "9ba0c7b0-59e4-4881-bda2-7d431fb18d58",
+      "name": "Save Health Score",
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const weatherRows = $('Parse Weather Clean').all().map(i=>i.json);\nconst aqiRows = $('Parse AQI Clean').all().map(i=>i.json);\nconst anomalies = [];\nconst now = new Date().toISOString();\n\nconst zscore = (arr,val) => {\n  const mean = arr.reduce((a,b)=>a+b,0)/arr.length;\n  const std = Math.sqrt(arr.map(x=>(x-mean)**2).reduce((a,b)=>a+b,0)/arr.length);\n  return std===0?0:(val-mean)/std;\n};\n\nconst temps = weatherRows.map(r=>r.temp_max).filter(v=>v!=null);\nif(temps.length>3){\n  const last = temps[temps.length-1];\n  const z = zscore(temps.slice(0,-1),last);\n  if(Math.abs(z)>=2.5) anomalies.push({\n    detected_at:now,source:'weather_daily',column_name:'temp_max',\n    value:last,mean:Math.round(temps.slice(0,-1).reduce((a,b)=>a+b,0)/temps.slice(0,-1).length*10)/10,\n    z_score:Math.round(z*100)/100,\n    severity:Math.abs(z)>=4?'HIGH':Math.abs(z)>=3?'MEDIUM':'LOW',\n    description:`Temperature ${last}°C is ${Math.abs(z).toFixed(1)}σ from baseline`\n  });\n}\n\nlet streak=0;\nweatherRows.forEach(r=>{\n  if((r.temp_max||0)>=35){streak++;}else{streak=0;}\n  if(streak===3) anomalies.push({\n    detected_at:now,source:'weather_daily',column_name:'heatwave',\n    value:r.temp_max,mean:35,z_score:99,severity:'HIGH',\n    description:'Heatwave: 3+ consecutive days >= 35°C'\n  });\n});\n\nconst uvs = weatherRows.map(r=>r.uv_index_max).filter(v=>v!=null);\nif(uvs.length>=3){\n  const last = uvs[uvs.length-1];\n  const z = zscore(uvs.slice(0,-1),last);\n  if(Math.abs(z)>=2.5||last>=11) anomalies.push({\n    detected_at:now,source:'weather_daily',column_name:'uv_index_max',\n    value:last,mean:Math.round(uvs.slice(0,-1).reduce((a,b)=>a+b,0)/uvs.slice(0,-1).length*10)/10,\n    z_score:Math.round(z*100)/100,severity:last>=11?'HIGH':'MEDIUM',\n    description:`UV Index ${last} — ${last>=11?'EXTREME':'elevated'}`\n  });\n}\n\naqiRows.forEach(todayAQI => {\n  if(todayAQI.pm25_exceeds_who) anomalies.push({\n    detected_at:now,source:'air_quality_daily',column_name:'pm25_avg',\n    value:todayAQI.pm25_avg,mean:15,z_score:null,\n    severity:todayAQI.pm25_avg>30?'HIGH':'MEDIUM',\n    description:`PM2.5 ${todayAQI.pm25_avg} ug/m3 exceeds WHO limit of 15 on ${todayAQI.fetch_date}`\n  });\n  if(todayAQI.no2_exceeds_who) anomalies.push({\n    detected_at:now,source:'air_quality_daily',column_name:'no2_avg',\n    value:todayAQI.no2_avg,mean:25,z_score:null,severity:'MEDIUM',\n    description:`NO2 ${todayAQI.no2_avg} ug/m3 exceeds WHO limit of 25 on ${todayAQI.fetch_date}`\n  });\n});\n\nif(anomalies.length===0) return [{json:{\n  detected_at:now,source:'system',column_name:'none',\n  value:0,mean:0,z_score:0,severity:'NONE',description:'No anomalies detected'\n}}];\nreturn anomalies.map(a=>({json:a}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1984,
+        -208
+      ],
+      "id": "a67cd4f3-35dc-4e4f-80c7-43e64453bee5",
+      "name": "Detect Anomalies"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "datasetId": {
+          "__rl": true,
+          "value": "analytics",
+          "mode": "list",
+          "cachedResultName": "analytics"
+        },
+        "tableId": {
+          "__rl": true,
+          "value": "anomaly_log",
+          "mode": "list",
+          "cachedResultName": "anomaly_log"
+        },
+        "dataMode": "define",
+        "fieldsUi": {
+          "values": [
+            {
+              "fieldId": "detected_at",
+              "fieldValue": "={{ $json.detected_at }}"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "={{ $json.source }}"
+            },
+            {
+              "fieldId": "column_name",
+              "fieldValue": "={{ $json.column_name }}"
+            },
+            {
+              "fieldId": "value",
+              "fieldValue": "={{ $json.value }}"
+            },
+            {
+              "fieldId": "mean",
+              "fieldValue": "={{ $json.mean }}"
+            },
+            {
+              "fieldId": "z_score",
+              "fieldValue": "={{ $json.z_score }}"
+            },
+            {
+              "fieldId": "severity",
+              "fieldValue": "={{ $json.severity }}"
+            },
+            {
+              "fieldId": "description",
+              "fieldValue": "={{ $json.description }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        2128,
+        -208
+      ],
+      "id": "808e9451-c624-49d3-8068-135732b634b9",
+      "name": "Save Anomalies",
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const weatherRows = $('Parse Weather Clean').all().map(i=>i.json);\nconst aqiRows = $('Parse AQI Clean').all().map(i=>i.json);\n\nconst linReg = (values) => {\n  const n = values.length;\n  if(n<3) return {predicted:null,r2:0,trend:'insufficient_data',confidence:'low'};\n  const meanX=(n-1)/2, meanY=values.reduce((a,b)=>a+b,0)/n;\n  const slope=values.map((y,i)=>(i-meanX)*(y-meanY)).reduce((a,b)=>a+b,0)/\n    values.map((_,i)=>(i-meanX)**2).reduce((a,b)=>a+b,0);\n  const intercept=meanY-slope*meanX;\n  const predicted=slope*n+intercept;\n  const yHat=values.map((_,i)=>slope*i+intercept);\n  const ssTot=values.map(y=>(y-meanY)**2).reduce((a,b)=>a+b,0);\n  const ssRes=values.map((y,i)=>(y-yHat[i])**2).reduce((a,b)=>a+b,0);\n  const r2=ssTot>0?1-ssRes/ssTot:0;\n  return {\n    predicted:Math.round(predicted*100)/100,\n    r2:Math.round(r2*100)/100,\n    trend:slope>0.05?'rising':slope<-0.05?'falling':'stable',\n    confidence:r2>0.7?'high':r2>0.4?'medium':'low'\n  };\n};\n\nconst tomorrow = new Date();\ntomorrow.setDate(tomorrow.getDate()+1);\nconst tomorrowDate = tomorrow.toISOString().split('T')[0];\nconst todayDate = new Date().toISOString().split('T')[0];\n\nconst temps = weatherRows.map(r=>r.temp_max).filter(v=>v!=null);\nconst uvs   = weatherRows.map(r=>r.uv_index_max).filter(v=>v!=null);\nconst pm25s  = aqiRows.map(r=>r.pm25_avg).filter(v=>v!=null);\n\nconst tempPred = linReg(temps);\nconst uvPred   = linReg(uvs);\nconst pm25Pred = linReg(pm25s);\n\nconst pTemp = tempPred.predicted||25;\nconst pUV   = uvPred.predicted||3;\nconst pPM25 = pm25Pred.predicted||10;\n\nconst pTempScore = pTemp<30?25:pTemp<33?20:pTemp<37?10:0;\nconst pUVScore   = pUV<3?25:pUV<6?20:pUV<8?10:pUV<11?5:0;\nconst pAQIScore  = pPM25<=15?25:pPM25<=30?15:5;\nconst pTotal     = pTempScore+pUVScore+pAQIScore+18;\n\nreturn [{json:{\n  prediction_date:      todayDate,\n  for_date:             tomorrowDate,\n  predicted_temp_max:   tempPred.predicted,\n  temp_trend:           tempPred.trend,\n  temp_confidence:      tempPred.confidence,\n  temp_r2:              tempPred.r2,\n  predicted_uv_index:   uvPred.predicted,\n  uv_trend:             uvPred.trend,\n  predicted_pm25:       pm25Pred.predicted,\n  pm25_trend:           pm25Pred.trend,\n  predicted_health_score: pTotal,\n  predicted_label:      pTotal>=75?'Safe':pTotal>=50?'Caution':pTotal>=25?'High Risk':'Extreme Risk',\n  tomorrow_weekday:     tomorrow.toLocaleDateString('en-GB',{weekday:'long'}),\n  method:               'linear_regression_3day',\n  created_at:           new Date().toISOString()\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        -208
+      ],
+      "id": "8ec4f481-ac4b-4458-a843-dcd4f1d6e7b6",
+      "name": "Predict Tomorrow"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "datasetId": {
+          "__rl": true,
+          "value": "analytics",
+          "mode": "list",
+          "cachedResultName": "analytics"
+        },
+        "tableId": {
+          "__rl": true,
+          "value": "predictions",
+          "mode": "list",
+          "cachedResultName": "predictions"
+        },
+        "dataMode": "define",
+        "fieldsUi": {
+          "values": [
+            {
+              "fieldId": "prediction_date",
+              "fieldValue": "={{ $json.prediction_date }}"
+            },
+            {
+              "fieldId": "for_date",
+              "fieldValue": "={{ $json.for_date }}"
+            },
+            {
+              "fieldId": "predicted_temp_max",
+              "fieldValue": "={{ $json.predicted_temp_max }}"
+            },
+            {
+              "fieldId": "temp_trend",
+              "fieldValue": "={{ $json.temp_trend }}"
+            },
+            {
+              "fieldId": "temp_confidence",
+              "fieldValue": "={{ $json.temp_confidence }}"
+            },
+            {
+              "fieldId": "temp_r2",
+              "fieldValue": "={{ $json.temp_r2 }}"
+            },
+            {
+              "fieldId": "predicted_uv_index",
+              "fieldValue": "={{ $json.predicted_uv_index }}"
+            },
+            {
+              "fieldId": "uv_trend",
+              "fieldValue": "={{ $json.uv_trend }}"
+            },
+            {
+              "fieldId": "predicted_pm25",
+              "fieldValue": "={{ $json.predicted_pm25 }}"
+            },
+            {
+              "fieldId": "pm25_trend",
+              "fieldValue": "={{ $json.pm25_trend }}"
+            },
+            {
+              "fieldId": "predicted_health_score",
+              "fieldValue": "={{ $json.predicted_health_score }}"
+            },
+            {
+              "fieldId": "predicted_label",
+              "fieldValue": "={{ $json.predicted_label }}"
+            },
+            {
+              "fieldId": "tomorrow_weekday",
+              "fieldValue": "={{ $json.tomorrow_weekday }}"
+            },
+            {
+              "fieldId": "method",
+              "fieldValue": "={{ $json.method }}"
+            },
+            {
+              "fieldId": "created_at",
+              "fieldValue": "={{ $json.created_at }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        2448,
+        -208
+      ],
+      "id": "ea251d4b-8d19-4b37-95e2-061d707ebd5b",
+      "name": "Save Predictions",
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const scores = $('Compute Health Score').all().map(i=>i.json);\nconst score = scores[scores.length-1];\nconst pred = $('Predict Tomorrow').first().json;\n\nconst content = `Write a 3-4 sentence daily health briefing for Madrid residents. Start with today's Health Risk Score. Give specific recommendations (hydration, sunscreen, avoid outdoors 12-16h). End with tomorrow's outlook. Under 80 words.\n\nToday:\n- Score: ${score.total_score}/100 (${score.label})\n- Temp: ${score.temp_max}°C (${score.trend_vs_yesterday})\n- UV: ${score.uv_index}\n- Humidity: ${score.humidity}%\n- AQI breaches: ${score.aqi_breaches}\n- Sea temp: ${score.sea_temp}°C\n\nTomorrow:\n- Predicted temp: ${pred.predicted_temp_max}°C (${pred.temp_trend})\n- Predicted score: ${pred.predicted_health_score}/100 (${pred.predicted_label})`;\n\nreturn [{json:{\n  model: \"llama-3.3-70b-versatile\",\n  temperature: 0.3,\n  max_tokens: 200,\n  messages: [{ role: \"user\", content: content }]\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2624,
+        -208
+      ],
+      "id": "9f504fcd-4dc7-4047-bf9e-72b8b244a88b",
+      "name": "Prepare Briefing"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "datasetId": {
+          "__rl": true,
+          "value": "analytics",
+          "mode": "list",
+          "cachedResultName": "analytics"
+        },
+        "tableId": {
+          "__rl": true,
+          "value": "daily_briefing",
+          "mode": "list",
+          "cachedResultName": "daily_briefing"
+        },
+        "dataMode": "define",
+        "fieldsUi": {
+          "values": [
+            {
+              "fieldId": "briefing_date",
+              "fieldValue": "={{ $('Compute Health Score').last().json.score_date }}"
+            },
+            {
+              "fieldId": "briefing_text",
+              "fieldValue": "={{ $('Generate Briefing').first().json.choices[0].message.content }}"
+            },
+            {
+              "fieldId": "health_score",
+              "fieldValue": "={{ $('Compute Health Score').last().json.total_score }}"
+            },
+            {
+              "fieldId": "score_label",
+              "fieldValue": "={{ $('Compute Health Score').last().json.label }}"
+            },
+            {
+              "fieldId": "temp_max",
+              "fieldValue": "={{ $('Compute Health Score').last().json.temp_max }}"
+            },
+            {
+              "fieldId": "uv_index",
+              "fieldValue": "={{ $('Compute Health Score').last().json.uv_index }}"
+            },
+            {
+              "fieldId": "humidity",
+              "fieldValue": "={{ $('Compute Health Score').last().json.humidity }}"
+            },
+            {
+              "fieldId": "predicted_score",
+              "fieldValue": "={{ $('Predict Tomorrow').first().json.predicted_health_score }}"
+            },
+            {
+              "fieldId": "predicted_label",
+              "fieldValue": "={{ $('Predict Tomorrow').first().json.predicted_label }}"
+            },
+            {
+              "fieldId": "created_at",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        3056,
+        -208
+      ],
+      "id": "3c35d845-d504-49f2-88a8-c73af3d69d34",
+      "name": "Save Briefing",
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{GROQ_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($input.first().json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2768,
+        -208
+      ],
+      "id": "f0fee4e0-7984-474f-9ead-77e391fbe665",
+      "name": "Generate Briefing"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "93f85a76-3657-44a1-aad7-2f79ee303cc6",
+              "leftValue": "={{ $('Compute Health Score').last().json.total_score }}",
+              "rightValue": 40,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3184,
+        -208
+      ],
+      "id": "38295af5-27ca-4009-90ea-2c4baae6b047",
+      "name": "If3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2b91bccc-a4b4-4f57-8a15-ab7b47a1b8a4",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1664,
+        -208
+      ],
+      "id": "5da775c2-5a41-40f6-9228-812ea0c2a7d1",
+      "name": "If4"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1840,
+        32
+      ],
+      "id": "a21cc020-49af-473c-b3b6-8d8077716be1",
+      "name": "No Operation, do nothing"
+    },
+    {
+      "parameters": {
+        "sendTo": "medscb17@gmail.com",
+        "subject": "=🌡️ Madrid Health Alert — Score {{ $('Compute Health Score').last().json.total_score }}/100 ({{ $('Compute Health Score').last().json.label }})",
+        "message": "=<h2>🌡️ Madrid Health Alert</h2>\n<p><strong>Score: {{ $('Compute Health Score').last().json.total_score }}/100 — {{ $('Compute Health Score').last().json.label }}</strong></p>\n<p>{{ $('Generate Briefing').first().json.choices[0].message.content }}</p>\n<table border=\"1\" cellpadding=\"8\" style=\"border-collapse:collapse\">\n  <tr><td>🌡️ Temperature</td><td>{{ $('Compute Health Score').last().json.temp_max }}°C</td></tr>\n  <tr><td>☀️ UV Index</td><td>{{ $('Compute Health Score').last().json.uv_index }}</td></tr>\n  <tr><td>💧 Humidity</td><td>{{ $('Compute Health Score').last().json.humidity }}%</td></tr>\n  <tr><td>💨 AQI Breaches</td><td>{{ $('Compute Health Score').last().json.aqi_breaches }}</td></tr>\n  <tr><td>🌊 Sea Temp</td><td>{{ $('Compute Health Score').last().json.sea_temp }}°C</td></tr>\n  <tr><td>🔮 Tomorrow</td><td>{{ $('Predict Tomorrow').first().json.predicted_temp_max }}°C — {{ $('Predict Tomorrow').first().json.predicted_label }}</td></tr>\n</table>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        3376,
+        -240
+      ],
+      "id": "49586fd6-d426-4e38-8ddf-6af489436a21",
+      "name": "Send a message",
+      "webhookId": "fec919ca-804f-4d2f-a00d-673d96323a4d",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "GDhbyDkG0lKL1ZBT",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3376,
+        -64
+      ],
+      "id": "7eeb4aac-fc0a-46d8-9313-f794102ae61d",
+      "name": "No Operation, do nothing1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8b3bd80a-19eb-41af-8c12-2e9bc3c93248",
+              "leftValue": "={{ $json.briefing_date }}",
+              "rightValue": "={{ $now.toFormat('yyyy-MM-dd') }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2896,
+        -208
+      ],
+      "id": "eee07a70-8b1c-46cd-8d69-814edc9a0527",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "sqlQuery": "SELECT score_date FROM `tfm-dataflow.analytics.health_score`",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        1280,
+        -208
+      ],
+      "id": "81de866a-7dac-4d49-8ba3-c41c8778975f",
+      "name": "Check Existing Health Scores",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather": {
+      "main": [
+        [
+          {
+            "node": "Check Weather Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Marine": {
+      "main": [
+        [
+          {
+            "node": "Check Marine Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Air Quality": {
+      "main": [
+        [
+          {
+            "node": "Check AQI Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Weather": {
+      "main": [
+        [
+          {
+            "node": "Clean Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Marine": {
+      "main": [
+        [
+          {
+            "node": "Clean Marine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Air": {
+      "main": [
+        [
+          {
+            "node": "Clean Air",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Weather": {
+      "main": [
+        [
+          {
+            "node": "Parse Weather Clean",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Marine": {
+      "main": [
+        [
+          {
+            "node": "Parse Marine Clean",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Air": {
+      "main": [
+        [
+          {
+            "node": "Parse AQI Clean",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Weather Raw": {
+      "main": [
+        [
+          {
+            "node": "Fetch Marine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Weather Clean": {
+      "main": [
+        [
+          {
+            "node": "Filter New Weather Dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Marine Raw": {
+      "main": [
+        [
+          {
+            "node": "Fetch Air Quality",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Marine Clean": {
+      "main": [
+        [
+          {
+            "node": "Filter New Marine Dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save AQI Raw": {
+      "main": [
+        [
+          {
+            "node": "Check Existing Health Scores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AQI Clean": {
+      "main": [
+        [
+          {
+            "node": "Filter New AQI Dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Marine Exists": {
+      "main": [
+        [
+          {
+            "node": "Prepare Marine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check AQI Exists": {
+      "main": [
+        [
+          {
+            "node": "Prepare Air",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Health Score": {
+      "main": [
+        [
+          {
+            "node": "If4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter New Weather Dates": {
+      "main": [
+        [
+          {
+            "node": "Save Weather Raw",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Weather Exists": {
+      "main": [
+        [
+          {
+            "node": "Prepare Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter New Marine Dates": {
+      "main": [
+        [
+          {
+            "node": "Save Marine Raw",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter New AQI Dates": {
+      "main": [
+        [
+          {
+            "node": "Save AQI Raw",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Health Score": {
+      "main": [
+        [
+          {
+            "node": "Detect Anomalies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Anomalies": {
+      "main": [
+        [
+          {
+            "node": "Save Anomalies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Anomalies": {
+      "main": [
+        [
+          {
+            "node": "Predict Tomorrow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Predict Tomorrow": {
+      "main": [
+        [
+          {
+            "node": "Save Predictions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Predictions": {
+      "main": [
+        [
+          {
+            "node": "Prepare Briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Briefing": {
+      "main": [
+        [
+          {
+            "node": "Generate Briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Briefing": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If4": {
+      "main": [
+        [
+          {
+            "node": "Save Health Score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Briefing": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Save Briefing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Existing Health Scores": {
+      "main": [
+        [
+          {
+            "node": "Compute Health Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "4cf96868-e0d4-4ac5-89b3-bbcb0bed5f60",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "40d635085fa8d68f23f9c93e4b73fe6a1a32fa28733010a4c3d032bbb1823899"
+  },
+  "id": "h0I2JLNvSCrXRFVb",
+  "tags": []
+}

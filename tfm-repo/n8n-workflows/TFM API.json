@@ -1,0 +1,417 @@
+{
+  "name": "TFM API",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "function dropNullDates(items, dateField) {\n  return items.filter(item => item && item[dateField] != null);\n}\n\nfunction dedupeByKey(items, keyFields, timestampField) {\n  const seen = new Map();\n  for (const item of items) {\n    const key = keyFields.map(f => item[f]).join('|');\n    const existing = seen.get(key);\n    if (!existing) {\n      seen.set(key, item);\n    } else if (timestampField) {\n      const newTs = item[timestampField];\n      const oldTs = existing[timestampField];\n      if (newTs != null && (oldTs == null || newTs > oldTs)) {\n        seen.set(key, item);\n      }\n    } else {\n      seen.set(key, item);\n    }\n  }\n  return Array.from(seen.values())\n    .sort((a, b) => a[keyFields[0]] < b[keyFields[0]] ? 1 : -1);\n}\n\nfunction safeGet(nodeName) {\n  try {\n    return $(nodeName).all().map(i => i.json);\n  } catch (e) {\n    return { __missing: nodeName, __error: e.message };\n  }\n}\n\nfunction safeGetFirst(nodeName) {\n  try {\n    return $(nodeName).first().json;\n  } catch (e) {\n    return { __missing: nodeName, __error: e.message };\n  }\n}\n\nconst healthScoresRaw = safeGet('BigQuery - Health');\nconst anomaliesRaw = safeGet('BigQuery - Anomalies');\nconst forecastRaw = safeGet('BigQuery - Forecast');\nconst briefingRaw = safeGet('BigQuery - Briefing');\nconst weatherRaw = safeGet('BigQuery - Weather');\nconst marineRaw = safeGet('BigQuery - Marine');\nconst airQualityRaw = safeGet('BigQuery - Air');\nconst weatherWeekRaw = safeGetFirst('Fetch Weather Week Live');\nconst aqiWeekRaw = safeGetFirst('Fetch AQI Week Live');\n\nconst missing = [\n  healthScoresRaw, anomaliesRaw, forecastRaw, briefingRaw,\n  weatherRaw, marineRaw, airQualityRaw, weatherWeekRaw, aqiWeekRaw\n].filter(r => r && r.__missing);\n\nif (missing.length > 0) {\n  return [{\n    json: {\n      error: \"One or more node references in the Merge node do not match the canvas.\",\n      missingNodes: missing.map(m => ({ referenced: m.__missing, detail: m.__error }))\n    }\n  }];\n}\n\n// --- Build the 7-day live forecast ---\nlet liveForecastWeek = [];\nlet liveForecastDebug = null;\ntry {\n  const weatherFc = weatherWeekRaw.daily;\n  const aqiFc = aqiWeekRaw.hourly;\n\n  if (!weatherFc || !weatherFc.time) {\n    liveForecastDebug = { issue: \"weatherWeekRaw.daily missing/.time missing\", keys: Object.keys(weatherWeekRaw || {}) };\n    throw new Error(\"weather daily data missing\");\n  }\n  if (!aqiFc || !aqiFc.time) {\n    liveForecastDebug = { issue: \"aqiWeekRaw.hourly missing/.time missing\", keys: Object.keys(aqiWeekRaw || {}) };\n    throw new Error(\"aqi hourly data missing\");\n  }\n\n  const pm25ByDate = {};\n  aqiFc.time.forEach((ts, i) => {\n    const date = ts.split('T')[0];\n    const val = aqiFc.pm2_5 ? aqiFc.pm2_5[i] : null;\n    if (val == null) return;\n    if (!pm25ByDate[date]) pm25ByDate[date] = [];\n    pm25ByDate[date].push(val);\n  });\n\n  function scoreDay(tempMax, uvMax, pm25Avg) {\n    const tempScore = tempMax < 30 ? 25 : tempMax < 33 ? 20 : tempMax < 37 ? 10 : 0;\n    const uvScore = uvMax < 3 ? 25 : uvMax < 6 ? 20 : uvMax < 8 ? 10 : uvMax < 11 ? 5 : 0;\n    const aqiScore = pm25Avg == null ? 25 : pm25Avg <= 15 ? 25 : pm25Avg <= 30 ? 15 : 5;\n    const humidityScore = 15;\n    const total = tempScore + uvScore + aqiScore + humidityScore;\n    let label = \"Safe\";\n    if (total < 25) label = \"Extreme Risk\";\n    else if (total < 50) label = \"High Risk\";\n    else if (total < 75) label = \"Caution\";\n    return { total, label };\n  }\n\n  liveForecastWeek = weatherFc.time.map((date, i) => {\n    const tempMax = weatherFc.temperature_2m_max[i];\n    const uvMax = weatherFc.uv_index_max[i];\n    const values = pm25ByDate[date] || [];\n    const pm25Avg = values.length\n      ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 100) / 100\n      : null;\n    const { total, label } = scoreDay(tempMax, uvMax, pm25Avg);\n    return {\n      for_date: date,\n      predicted_temp_max: tempMax,\n      predicted_uv_index: uvMax,\n      predicted_pm25: pm25Avg,\n      predicted_health_score: total,\n      predicted_label: label\n    };\n  });\n} catch (e) {\n  liveForecastWeek = [{ __error: \"Failed to build live forecast: \" + e.message, __debug: liveForecastDebug }];\n}\n\nreturn [{\n  json: {\n    healthScores: dedupeByKey(dropNullDates(healthScoresRaw, 'score_date'), ['score_date'], 'created_at'),\n    anomalies: anomaliesRaw,\n    forecast: dedupeByKey(dropNullDates(forecastRaw, 'for_date'), ['for_date', 'method'], 'created_at'),\n    briefing: dedupeByKey(dropNullDates(briefingRaw, 'briefing_date'), ['briefing_date'], 'created_at')[0] || null,\n    weather: dedupeByKey(dropNullDates(weatherRaw, 'fetch_date'), ['fetch_date'], 'ingestion_ts'),\n    marine: dedupeByKey(dropNullDates(marineRaw, 'fetch_date'), ['fetch_date'], 'ingestion_ts'),\n    airQuality: dedupeByKey(dropNullDates(airQualityRaw, 'fetch_date'), ['fetch_date'], 'ingestion_ts'),\n    liveForecastWeek: liveForecastWeek\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        -32
+      ],
+      "id": "c21c3427-b6aa-495f-b11c-3730615dd9c1",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1120,
+        -32
+      ],
+      "id": "a8294cbc-c4fc-466a-bd10-bdfe9dd70b1c",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "path": "health-data",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1136,
+        -32
+      ],
+      "id": "40f5ffd7-16d6-4c45-9a9e-dd3957a34758",
+      "name": "Webhook",
+      "webhookId": "dcfa4dd0-03c6-4f25-8d3f-4ec54466cece"
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "sqlQuery": "SELECT score_date, total_score, label, temp_score, aqi_score, uv_score, humidity_score,\n       temp_max, uv_index, humidity, aqi_breaches, pm25_avg, no2_avg, sea_temp,\n       temp_change_vs_yesterday, trend_vs_yesterday\nFROM `tfm-dataflow.analytics.health_score`\nORDER BY score_date DESC\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        176,
+        -32
+      ],
+      "id": "d9fa7b60-957e-4278-9ddd-575a62830c1a",
+      "name": "BigQuery - Health",
+      "executeOnce": true,
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "sqlQuery": "SELECT detected_at, source, column_name, value, mean, z_score, severity, description\nFROM `tfm-dataflow.analytics.anomaly_log`\nORDER BY detected_at DESC\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        736,
+        -32
+      ],
+      "id": "0ce9105c-067d-4950-a187-630c1fc7594b",
+      "name": "BigQuery - Anomalies",
+      "executeOnce": true,
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "sqlQuery": "SELECT briefing_date, briefing_text, health_score, score_label, temp_max, uv_index, humidity,\n       predicted_score, predicted_label\nFROM `tfm-dataflow.analytics.daily_briefing`\nORDER BY briefing_date DESC\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        368,
+        -32
+      ],
+      "id": "7679b0c6-3762-46d0-8aee-d1309f749994",
+      "name": "BigQuery - Briefing",
+      "executeOnce": true,
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "sqlQuery": "SELECT prediction_date, for_date, predicted_temp_max, temp_trend, temp_confidence, temp_r2,\n       predicted_uv_index, uv_trend, predicted_pm25, pm25_trend, predicted_health_score,\n       predicted_label, tomorrow_weekday, method\nFROM `tfm-dataflow.analytics.predictions`\nORDER BY for_date ASC",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        544,
+        -32
+      ],
+      "id": "b93cbc75-c7ac-4b33-b627-389164cbc0c1",
+      "name": "BigQuery - Forecast",
+      "executeOnce": true,
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "sqlQuery": "SELECT fetch_date, temp_max, temp_min, precipitation, windspeed_max,\n  humidity_max, uv_index_max, weather_code, heat_risk, ingestion_ts\nFROM `tfm-dataflow.raw_data.weather_daily`\nORDER BY fetch_date DESC",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        -448,
+        -32
+      ],
+      "id": "de1605e6-4656-4eb1-97f0-eb9d56c87bc1",
+      "name": "BigQuery - Weather",
+      "executeOnce": true,
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "sqlQuery": "SELECT fetch_date, sea_temp_max, wave_height_max, ingestion_ts\nFROM `tfm-dataflow.raw_data.marine_daily`\nORDER BY fetch_date DESC",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        -224,
+        -32
+      ],
+      "id": "2df91a96-edd7-4a3b-80d8-187971ee5f08",
+      "name": "BigQuery - Marine",
+      "executeOnce": true,
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "tfm-dataflow",
+          "mode": "list",
+          "cachedResultName": "tfm-dataflow",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=tfm-dataflow"
+        },
+        "sqlQuery": "SELECT fetch_date, pm25_avg, pm10_avg, no2_avg, o3_avg, pm25_exceeds_who, no2_exceeds_who, o3_exceeds_who, aqi_status\nFROM `tfm-dataflow.raw_data.air_quality_daily`\nORDER BY fetch_date DESC\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        -32,
+        -32
+      ],
+      "id": "6ec1289f-c78b-412e-9f7f-721825587d08",
+      "name": "BigQuery - Air",
+      "executeOnce": true,
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "yDohg21nvDyyatHm",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast?latitude=40.4168&longitude=-3.7038&daily=temperature_2m_max,uv_index_max&timezone=Europe/Madrid&past_days=0&forecast_days=7",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -928,
+        -32
+      ],
+      "id": "1cbaa4fe-5837-409e-aeb9-ac1816229d8b",
+      "name": "Fetch Weather Week Live"
+    },
+    {
+      "parameters": {
+        "url": "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=40.4168&longitude=-3.7038&hourly=pm2_5&timezone=Europe/Madrid&past_days=0&forecast_days=7",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -688,
+        -32
+      ],
+      "id": "c03aa413-3b97-43aa-8fbd-52c95f6b0746",
+      "name": "Fetch AQI Week Live"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Weather Week Live",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BigQuery - Health": {
+      "main": [
+        [
+          {
+            "node": "BigQuery - Briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BigQuery - Anomalies": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BigQuery - Briefing": {
+      "main": [
+        [
+          {
+            "node": "BigQuery - Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BigQuery - Forecast": {
+      "main": [
+        [
+          {
+            "node": "BigQuery - Anomalies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BigQuery - Weather": {
+      "main": [
+        [
+          {
+            "node": "BigQuery - Marine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BigQuery - Air": {
+      "main": [
+        [
+          {
+            "node": "BigQuery - Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BigQuery - Marine": {
+      "main": [
+        [
+          {
+            "node": "BigQuery - Air",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather Week Live": {
+      "main": [
+        [
+          {
+            "node": "Fetch AQI Week Live",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch AQI Week Live": {
+      "main": [
+        [
+          {
+            "node": "BigQuery - Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "3fdf8935-ed62-4335-8948-937755f24f65",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "40d635085fa8d68f23f9c93e4b73fe6a1a32fa28733010a4c3d032bbb1823899"
+  },
+  "id": "WcFlxJ0M6NRDnrkY",
+  "tags": []
+}
